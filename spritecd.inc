@@ -38,31 +38,10 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
     lda     (ZP_PATH_PTR),y     ; get Y (HI) from path table
     sta     VERA_data0          ; set Y (HI) in VERA
  
-    ; check whether this sprite had a collision in the past
-    lda     sprite_collision_mask,x ; get the collision mask
-    beq     old_collision       ; go if already hit
-
-    ; check whether this sprite had a collision just now
-    and     ZP_COLLISION_X      ; get the ISR X bits as of the VSYNC time
-    beq     no_collision        ; go if nothing happened
-    lda     sprite_collision_mask,x ; get the collision mask
-    and     ZP_COLLISION_Y      ; get the ISR Y bits as of the VSYNC time
-    bne     new_collision       ; go if something happened
-
-no_collision:
-    ; no collision; use mask for next path point
     iny
     lda     (ZP_PATH_PTR),y     ; get collision mask from path table
     sta     VERA_data0          ; set collision mask in VERA
     sta     sprite_collision_mask,x ; set the collision mask
-    bra     have_mask 
- 
-new_collision:
-    ; new collision; change the sprite
-    stz     sprite_collision_mask,x ; clear the collision mask
-old_collision:
-    stz     VERA_data0              ; disable the sprite
-have_mask:
 
     .endscope
 .endmacro
@@ -85,9 +64,6 @@ have_mask:
 
     ; initialize all of the sprites in this ring
 init_sprite:
-    lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
-    sta     sprite_collision_mask,x ; set initial sprite state
-
     InitSpriteDefinition
 
     lda     #SPRITE_HEIGHT_16_PIXELS|SPRITE_WIDTH_16_PIXELS
