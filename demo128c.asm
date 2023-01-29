@@ -47,7 +47,9 @@ start:
     FILLVRAM $02,$08000,$8000
     FILLVRAM $03,$10000,$2C00
 
-    stz     ZP_ISR_COLLISIONS           ; assume no collisions
+    stz     ZP_COLLISION_X              ; assume no collisions in X
+    stz     ZP_COLLISION_Y              ; assume no collisions in Y
+
     jsr     init_all_sprite_positions
 
     RAM2VRAM sprite_bitmap, SPRITE_BITMAP_ADDR, SPRITE_BITMAP_SIZE
@@ -67,7 +69,7 @@ start:
     sta     IRQVec
     lda     #>custom_irq_handler
     sta     IRQVec+1
-    lda     #VSYNC_BIT;|SPRCOL_BIT
+    lda     #VSYNC_BIT|SPRCOL_BIT
     sta     VERA_ien
     cli                     ; enable IRQ now that vector is properly set
 
@@ -81,15 +83,26 @@ custom_irq_handler:
     lda     VERA_isr                    ; get interrupt information
     bit     #VSYNC_BIT                  ; is this a video synch interrupt?
     beq     continue                    ; go if no
-    stz     ZP_ISR_COLLISIONS           ; assume no collisions
+
+    stz     ZP_COLLISION_X              ; assume no collisions in X
+    stz     ZP_COLLISION_Y              ; assume no collisions in Y
+
     bit     #SPRCOL_BIT                 ; is this a collision interrupt?
     beq     no_collision                ; go if no
-    and     #SPRITE_COLL_MASK_F0_ALL    ; keep collision bits only
-    sta     ZP_ISR_COLLISIONS           ; save collision bits
+ 
+    tax                                 ; save ISR value
+    and     #SPRITE_COLL_MASK_30_L_R    ; keep X collision bits only
+    sta     ZP_COLLISION_X              ; save X collision bits
+    txa                                 ; restore ISR value
+    and     #SPRITE_COLL_MASK_C0_T_B    ; keep Y collision bits only
+    sta     ZP_COLLISION_Y              ; save Y collision bits
+
 no_collision:
-    jsr     update_all_sprite_positions
-;    lda     #SPRCOL_BIT
-;    ???     VERA_isr                    ; clear the sprite collision indicator
+    jsr     update_all_sprite_positions ; go move/destroy all sprites
+
+    ; clear the sprite collision indicator
+    lda     #SPRCOL_BIT
+    sta     VERA_isr
 
 continue:
     ; continue to default IRQ handler
