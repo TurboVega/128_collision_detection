@@ -203,7 +203,8 @@ new_collision:
     sta     VERA_data0          ; set Y (HI) in VERA
  
     ; new collision; change the sprite
-    stz     sprite_collision_mask,x ; clear the collision mask
+    lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
+    sta     sprite_collision_mask,x ; set initial sprite state
     stz     VERA_data0              ; disable the sprite
 have_mask:
 
