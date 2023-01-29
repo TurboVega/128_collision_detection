@@ -34,28 +34,28 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
  
     ; check whether this sprite had a collision in the past
     lda     sprite_collision_mask,x ; get the collision mask
-    beq     have_mask           ; go if already destroyed
- 
+    beq     old_collision       ; go if already destroyed
+
     ; check whether this sprite had a collision just now
     and     ZP_COLLISION_X      ; get the ISR X bits as of the VSYNC time
     beq     no_collision        ; go if nothing happened
- brk
     lda     sprite_collision_mask,x ; get the collision mask
     and     ZP_COLLISION_Y      ; get the ISR Y bits as of the VSYNC time
     bne     new_collision       ; go if something happened
- brk
+
 no_collision:
     ; no collision; use mask for next path point
     iny
     lda     (ZP_PATH_PTR),y     ; get collision mask from path table
     sta     VERA_data0          ; set collision mask in VERA
+    sta     sprite_collision_mask,x ; set the collision mask
     bra     have_mask 
  
 new_collision:
- brk
     ; new collision; turn off the sprite
-    stz     VERA_data0              ; disable the sprite
     stz     sprite_collision_mask,x ; clear the collision mask
+old_collision:
+    stz     VERA_data0              ; disable the sprite
 have_mask:
 
     .endscope
@@ -103,10 +103,9 @@ init_sprite:
 no_rollover:
 
     inx                         ; advance to next sprite index
-    stx ZP_TEMP_VAR
     cpx     #sprtend            ; done with this ring of sprites?
     bne     init_sprite         ; go if no
- 
+
     .endscope
 .endmacro
 
@@ -190,7 +189,6 @@ not_eor:
  
     ; move all of the sprites in this ring
 move_sprite:
-   
     lda     VERA_data0          ; skip 1 byte
     lda     VERA_data0          ; skip 1 byte
  
