@@ -114,12 +114,12 @@ init_all_sprite_positions:
     SetupData0 VRAM_sprattr
 
     ldx     #0                  ; init loop counter (sprite index)
-    lda     #32*5               ; # of bytes between 32 path point data structures
+    lda     #28*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 28 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     InitRing sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0
 
-    lda     #4*5                ; # of bytes between 4 path point data structures
+    lda     #4*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 4 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     InitRing sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1
@@ -163,10 +163,12 @@ no_index_wrap:
     stz     index+1             ; restart the index (HI)
 not_eor:
 
-    ; multiply the path index by 5 (size of one X,Y point with mask)
+    ; multiply the path index by  (size of one X,Y point with masks)
     lda     index+1             ; get index (HI)
     sta     ZP_TEMP_INDEX_HI    ; save temporary index (HI)
     lda     index               ; get index (LO)
+    asl                         ; multiply index by 2
+    rol     ZP_TEMP_INDEX_HI
     asl                         ; multiply index by 2
     rol     ZP_TEMP_INDEX_HI
     asl                         ; multiply index by 2
@@ -244,26 +246,26 @@ move_done:
     .endscope
 .endmacro
 
-RING_0_POINTS = ((end_sprite_path_0 - sprite_path_0) / 5)
-RING_1_POINTS = ((end_sprite_path_1 - sprite_path_1) / 5)
-RING_2_POINTS = ((end_sprite_path_2 - sprite_path_2) / 5)
-RING_3_POINTS = ((end_sprite_path_3 - sprite_path_3) / 5)
-RING_4_POINTS = ((end_sprite_path_4 - sprite_path_4) / 5)
-RING_5_POINTS = ((end_sprite_path_5 - sprite_path_5) / 5)
-RING_6_POINTS = ((end_sprite_path_6 - sprite_path_6) / 5)
-RING_7_POINTS = ((end_sprite_path_7 - sprite_path_7) / 5)
+RING_0_POINTS = ((end_sprite_path_0 - sprite_path_0) / SPRITE_PATH_STRUCT_SIZE)
+RING_1_POINTS = ((end_sprite_path_1 - sprite_path_1) / SPRITE_PATH_STRUCT_SIZE)
+RING_2_POINTS = ((end_sprite_path_2 - sprite_path_2) / SPRITE_PATH_STRUCT_SIZE)
+RING_3_POINTS = ((end_sprite_path_3 - sprite_path_3) / SPRITE_PATH_STRUCT_SIZE)
+RING_4_POINTS = ((end_sprite_path_4 - sprite_path_4) / SPRITE_PATH_STRUCT_SIZE)
+RING_5_POINTS = ((end_sprite_path_5 - sprite_path_5) / SPRITE_PATH_STRUCT_SIZE)
+RING_6_POINTS = ((end_sprite_path_6 - sprite_path_6) / SPRITE_PATH_STRUCT_SIZE)
+RING_7_POINTS = ((end_sprite_path_7 - sprite_path_7) / SPRITE_PATH_STRUCT_SIZE)
 
 update_all_sprite_positions:
 
     SetupData0 VRAM_sprattr
 
     ldx     #0                  ; init loop counter (sprite index)
-    lda     #32*5               ; # of bytes between 32 path point data structures
+    lda     #28*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 28 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     MoveRing sprite_path_0,end_sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0,RING_0_POINTS
 
-    lda     #4*5                ; # of bytes between 4 path point data structures
+    lda     #4*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 4 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     MoveRing sprite_path_1,end_sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1,RING_1_POINTS

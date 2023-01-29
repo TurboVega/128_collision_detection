@@ -34,6 +34,8 @@ Dec  Hex
 
 static const int ring_radius[8] = { 50, 70, 90, 110, 130, 150, 170, 190 };
 static const int num_points[8] = { 400, 208, 256, 304, 352, 400, 464, 512 };
+static unsigned short spatial_map_x[640];
+static unsigned short spatial_map_y[480];
 
 bool point_in_top_left(short x, short y) {
     return x >= 0 && x < CENTER_X && y >= 0 && y < CENTER_Y;
@@ -87,8 +89,31 @@ bool sprite_in_bottom_right(short x, short y) {
             point_in_bottom_right(lastx, lasty);
 }
 
+void create_spatial_map(unsigned short* spatial_map, int sprite_size,
+                        int screen_size, int cell_size) {
+    unsigned char bits[640+64];
+    for (int pos = 0; pos < screen_size; pos++) {
+        memset(bits, 0, sizeof(bits));
+        for (int b=0; b<sprite_size; b++) {
+            bits[pos+b] = 1;
+        }
+        unsigned short map = 0;
+        int pos2 = 0;
+        for (int cell = 0; cell < screen_size/cell_size; cell++) {
+            unsigned char bit = 0;
+            for (int b=0; b<cell_size; b++) {
+                bit |= bits[pos2++];
+            }
+            spatial_map[pos] = (spatial_map[pos] << 1) | (unsigned short)bit;
+        }
+    }
+}
+
 int main()
 {
+    create_spatial_map(spatial_map_x, 16, 640, 40);
+    create_spatial_map(spatial_map_y, 16, 480, 30);
+
     for (int n = 0; n < 8; n++) {
         int hradius, vradius;
         if (n == 0) {
@@ -126,12 +151,14 @@ int main()
                 collision_mask |= (SPRITE_COLL_MASK_80_BOTTOM|SPRITE_COLL_MASK_20_RIGHT);
             }
 
-            printf("    .word    %i,%i    ;   %i, angle: %f, rads: %f\n", x, y, pt++, angle, rads);
-            printf("    .byte    $%02hX        ;   mask: %c%c%c%c\n", collision_mask,
+            printf("    .word    %i,%i         ;   %i, angle: %f, rads: %f\n", x, y, pt++, angle, rads);
+            printf("    .byte    $%02hX             ;   quadrant mask: %c%c%c%c\n", collision_mask,
                     (collision_mask & SPRITE_COLL_MASK_80_BOTTOM) ? 'B' : '-',
                     (collision_mask & SPRITE_COLL_MASK_40_TOP) ? 'T' : '-',
                     (collision_mask & SPRITE_COLL_MASK_20_RIGHT) ? 'R' : '-',
                     (collision_mask & SPRITE_COLL_MASK_10_LEFT) ? 'L' : '-');
+            printf("    .word    $%04hX,$%04hX     ;   grid masks X & Y\n",
+                    spatial_map_x[x], spatial_map_y[y]);
 
             if (pt >= num_points[n]) {
                 break;
