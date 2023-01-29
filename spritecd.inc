@@ -8,14 +8,20 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
 ; Initialize all sprite positions
 ;-------------------------------------------------------------------
 
-; SetCoordinatesAndMask: set X,Y coordinates and compute collision mask
+; InitSpriteDefinition: set all sprite definition information
 ;
 ; This macro expects that ZP_PATH_PTR points to the coordinate pair,
 ; and the x register equals the current sprite index (0..127).
 ;
-.macro SetCoordinatesAndMask
+.macro InitSpriteDefinition
     .scope
 
+    lda     #<SPRITE_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+
+    lda     #(>SPRITE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+ 
     ldy     #0                  ; offset to path X,Y coordinate
     lda     (ZP_PATH_PTR),y     ; get X (LO) from path table
     sta     VERA_data0          ; set X (LO) in VERA
@@ -34,7 +40,7 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
  
     ; check whether this sprite had a collision in the past
     lda     sprite_collision_mask,x ; get the collision mask
-    beq     old_collision       ; go if already destroyed
+    beq     old_collision       ; go if already hit
 
     ; check whether this sprite had a collision just now
     and     ZP_COLLISION_X      ; get the ISR X bits as of the VSYNC time
@@ -52,7 +58,7 @@ no_collision:
     bra     have_mask 
  
 new_collision:
-    ; new collision; turn off the sprite
+    ; new collision; change the sprite
     stz     sprite_collision_mask,x ; clear the collision mask
 old_collision:
     stz     VERA_data0              ; disable the sprite
@@ -82,13 +88,7 @@ init_sprite:
     lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
     sta     sprite_collision_mask,x ; set initial sprite state
 
-    lda     #<SPRITE_BITMAP_ADDR_SHIFTED
-    sta     VERA_data0
-
-    lda     #(>SPRITE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP
-    sta     VERA_data0
- 
-    SetCoordinatesAndMask
+    InitSpriteDefinition
 
     lda     #SPRITE_HEIGHT_16_PIXELS|SPRITE_WIDTH_16_PIXELS
     sta     VERA_data0
@@ -130,6 +130,85 @@ init_all_sprite_positions:
     InitRing sprite_path_6,SPRITE_END_RING_6,ZP_PATH_INDEX_6
     InitRing sprite_path_7,SPRITE_END_RING_7,ZP_PATH_INDEX_7
     rts
+
+; MoveCoordinatesAndMask: set X,Y coordinates and compute collision mask
+;
+; This macro expects that ZP_PATH_PTR points to the coordinate pair,
+; and the x register equals the current sprite index (0..127).
+;
+.macro MoveCoordinatesAndMask
+    .scope
+
+    ; check whether this sprite had a collision in the past
+    lda     sprite_collision_mask,x ; get the collision mask
+    beq     new_collision       ; go if already hit
+
+    ; check whether this sprite had a collision just now
+    and     ZP_COLLISION_X      ; get the ISR X bits as of the VSYNC time
+    beq     no_collision        ; go if nothing happened
+    lda     sprite_collision_mask,x ; get the collision mask
+    and     ZP_COLLISION_Y      ; get the ISR Y bits as of the VSYNC time
+    bne     new_collision       ; go if something happened
+
+no_collision:
+    ; no collision
+
+    lda     VERA_data0          ; skip 1 byte
+    lda     VERA_data0          ; skip 1 byte
+
+    ldy     #0                  ; offset to path X,Y coordinate
+    lda     (ZP_PATH_PTR),y     ; get X (LO) from path table
+    sta     VERA_data0          ; set X (LO) in VERA
+ 
+    iny
+    lda     (ZP_PATH_PTR),y     ; get X (HI) from path table
+    sta     VERA_data0          ; set X (HI) in VERA
+
+    iny
+    lda     (ZP_PATH_PTR),y     ; get Y (LO) from path table
+    sta     VERA_data0          ; set Y (LO) in VERA
+ 
+    iny
+    lda     (ZP_PATH_PTR),y     ; get Y (HI) from path table
+    sta     VERA_data0          ; set Y (HI) in VERA
+ 
+    ; use mask for next path point
+    iny
+    lda     (ZP_PATH_PTR),y     ; get collision mask from path table
+    sta     VERA_data0          ; set collision mask in VERA
+    sta     sprite_collision_mask,x ; set the collision mask
+    bra     have_mask 
+ 
+new_collision:
+    lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+
+    lda     #(>SPRITE_HIT_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+
+    ldy     #0                  ; offset to path X,Y coordinate
+    lda     (ZP_PATH_PTR),y     ; get X (LO) from path table
+    sta     VERA_data0          ; set X (LO) in VERA
+ 
+    iny
+    lda     (ZP_PATH_PTR),y     ; get X (HI) from path table
+    sta     VERA_data0          ; set X (HI) in VERA
+
+    iny
+    lda     (ZP_PATH_PTR),y     ; get Y (LO) from path table
+    sta     VERA_data0          ; set Y (LO) in VERA
+ 
+    iny
+    lda     (ZP_PATH_PTR),y     ; get Y (HI) from path table
+    sta     VERA_data0          ; set Y (HI) in VERA
+ 
+    ; new collision; change the sprite
+    stz     sprite_collision_mask,x ; clear the collision mask
+    stz     VERA_data0              ; disable the sprite
+have_mask:
+
+    .endscope
+.endmacro
 
 ;-------------------------------------------------------------------
 ; Update (move) all sprite positions
@@ -191,10 +270,7 @@ not_eor:
  
     ; move all of the sprites in this ring
 move_sprite:
-    lda     VERA_data0          ; skip 1 byte
-    lda     VERA_data0          ; skip 1 byte
- 
-     SetCoordinatesAndMask
+     MoveCoordinatesAndMask
 
     lda     VERA_data0          ; skip 1 byte
  
