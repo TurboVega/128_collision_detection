@@ -45,7 +45,7 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
     sta     VERA_data0                   ; set pointer to pixel data (LO)
 
     lda     #(>SPRITE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
-    sta     VERA_data0                   ; set pointer to pixel data (LO)
+    sta     VERA_data0                   ; set pointer to pixel data (HI)
  
     CopySpriteXYFields
  
@@ -53,6 +53,9 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
     lda     (ZP_PATH_PTR),y     ; get collision mask from path table
     sta     VERA_data0          ; set collision mask in VERA
     sta     sprite_collision_mask,x ; set the collision mask
+
+    lda     #SPRITE_HEIGHT_16_PIXELS|SPRITE_WIDTH_16_PIXELS
+    sta     VERA_data0          ; set sprite width & height
 
     .endscope
 .endmacro
@@ -76,9 +79,6 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
     ; initialize all of the sprites in this ring
 init_sprite:
     InitSpriteDefinition
-
-    lda     #SPRITE_HEIGHT_16_PIXELS|SPRITE_WIDTH_16_PIXELS
-    sta     VERA_data0
 
     ; leave some space between sprites
     lda     ZP_PATH_PTR_LO
@@ -106,7 +106,7 @@ init_all_sprite_positions:
 
     InitRing sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0
 
-    lda     #5*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 5 path point data structures
+    lda     #7*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 7 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     InitRing sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1
@@ -224,8 +224,8 @@ next_quad_sprite:
 keep_rolling:
     ; no collision, or no need to destroy the sprite
 
-    lda     VERA_data0          ; skip 1 byte
-    lda     VERA_data0          ; skip 1 byte
+    lda     VERA_data0          ; skip 1 byte (pixel address LO)
+    lda     VERA_data0          ; skip 1 byte (pixel address HI)
 
     CopySpriteXYFields
  
@@ -248,7 +248,7 @@ some_collision:
     ; new collision; change the sprite
     lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
     sta     sprite_collision_mask,x ; set initial sprite state
-    stz     VERA_data0              ; disable the sprite
+    sta     VERA_data0              ; show sprite, but prevent collision
 have_mask:
 
     .endscope
@@ -395,7 +395,7 @@ update_all_sprite_positions:
 
     MoveRing sprite_path_0,end_sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0,RING_0_POINTS,PROJECTILE
 
-    lda     #5*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 5 path point data structures
+    lda     #7*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 7 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     MoveRing sprite_path_1,end_sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1,RING_1_POINTS,TARGET
