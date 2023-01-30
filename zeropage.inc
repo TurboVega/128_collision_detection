@@ -56,9 +56,9 @@ ZP_PATH_PTR       = $54    ; used to point into any sprite path
 ZP_PATH_PTR_LO    = $54
 ZP_PATH_PTR_HI    = $55
 
-ZP_ISR_REG        = $56    ; holds a temporary copy of ISR register contents
-ZP_COLLISION_MASK = $57    ; used to compute or use a collision mask
-ZP_TEMP_VAR       = $58    ; holds a temporary value
+;ZP_ISR_REG        = $56    ; holds a temporary copy of ISR register contents
+;ZP_COLLISION_MASK = $57    ; used to compute or use a collision mask
+;ZP_TEMP_VAR       = $58    ; holds a temporary value
 ZP_NEXT_SPRITE_INC = $59   ; increment to reach next sprite data item for gapping
 ZP_COLLISION_X    = $5A    ; copy of ISR register collision bits for X (left vs right)
 ZP_COLLISION_Y    = $5B    ; copy of ISR register collision bits for Y (top vs bottom)

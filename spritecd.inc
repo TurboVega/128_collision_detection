@@ -130,50 +130,66 @@ init_all_sprite_positions:
     ; check whether this sprite had a collision in the past
     lda     sprite_collision_mask,x ; get the collision mask
     cmp     #SPRITE_ZDEPTH_ABOVE_L1 ; is this a dead sprite?
-    beq     some_collision      ; go if already hit
+    bne     sprite_active           ; go if no (still alive)
+    jmp     some_collision          ; go if already hit
+sprite_active:
 
     ; check whether this sprite had a quadrant collision just now
     and     ZP_COLLISION_X      ; get the ISR X bits as of the VSYNC time
-    beq     no_collision        ; go if nothing happened
+    beq     keep_rolling        ; go if nothing happened
     lda     sprite_collision_mask,x ; get the collision mask
     and     ZP_COLLISION_Y      ; get the ISR Y bits as of the VSYNC time
-    beq     no_collision        ; go if nothing happened
+    beq     keep_rolling        ; go if nothing happened
 
-    .if .match(is_projectile, 1)
-
+    .if (.match({is_projectile}, {PROJECTILE}))
+ 
     ; save a pointer to this projectile, for use when moving targets
     lda     ZP_PATH_PTR_LO              ; get pointer to path structure (LO)
     sta     (ZP_QUAD_PROJ_ARRAY_PTR)    ; save pointer to path structure (LO)
     ldy     #1                          ; offset to HI part
     lda     ZP_PATH_PTR_HI              ; get pointer to path structure (HI)
     sta     (ZP_QUAD_PROJ_ARRAY_PTR),y  ; save pointer to path structure (HI)
-    inc     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; advance array item pointer (LO)
-    bcc     no_ptr_wrap                 ; go if no overflow
-    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; advance array item pointer (HI)
-no_ptr_wrap:
-    bra     some_collision
+    inc     ZP_QUAD_PROJ_CNT            ; count quadrant projectiles discovered
 
-    .else ; this sprite is a target, not a projectile
+    lda     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; advance array item pointer (LO)
+    clc
+    adc     #2                          ; sizeof a pointer
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set array item pointer (LO)
+    bne     no_ptr_wrap                 ; go if no overflow
+    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set array item pointer (HI)
+no_ptr_wrap:
+    ; fall through to keep_rolling
+ 
+    .endif
+
+    .if (.match({is_projectile}, {TARGET}))
+
+    ; this sprite is a target, not a projectile
 
     ; check whether this sprite had a spatial collision just now
     ; (loop through quadrant projectiles and compare spatial masks)
 
     lda     ZP_QUAD_PROJ_CNT            ; get number of quadrant projectiles discovered
+    beq     keep_rolling                ; go if no projectile has a collision
     sta     ZP_QUAD_PROJ_INDEX          ; set loop index for traversing quadrant projectiles
     lda     #<quadrant_projectiles      ; get start of projectile array (LO)
     sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set start of projectile array (LO)
     lda     #>quadrant_projectiles      ; get start of projectile array (HI)
     sta     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set start of projectile array (HI)
-
+ 
 check_spatial_collision:
     lda     (ZP_QUAD_PROJ_ARRAY_PTR)        ; get pointer to target sprite (LO)
     sta     ZP_PROJECTILE_PTR_LO            ; set pointer to target sprite (LO)
     ldy     #1                              ; offset to HI part
     lda     (ZP_QUAD_PROJ_ARRAY_PTR),y      ; get pointer to target sprite (HI)
     sta     ZP_PROJECTILE_PTR_HI            ; set pointer to target sprite (HI)
-    inc     ZP_QUAD_PROJ_ARRAY_PTR_LO       ; advance array item pointer (LO)
-    bcc     no_ptr_wrap2                    ; go if no overflow
-    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI       ; advance array item pointer (HI)
+
+    lda     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; advance array item pointer (LO)
+    clc
+    adc     #2                          ; sizeof a pointer
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set array item pointer (LO)
+    bne     no_ptr_wrap2                ; go if no overflow
+    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set array item pointer (HI)
 no_ptr_wrap2:
 
     ldy     #SPRITE_PATH_SPATIAL_MASK_X_LO   ; offset into path structure for X (LO)
@@ -184,7 +200,7 @@ no_ptr_wrap2:
     iny                                      ; offset into path structure for X (HI)
     lda     (ZP_PATH_PTR),y                  ; get target spatial mask X (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (HI) 
-    beq     no_collision                     ; go if sprites do not collide in X
+    beq     next_quad_sprite                 ; go if sprites do not collide in X
 x_collision:
 
     iny                                      ; offset into path structure for Y (LO)
@@ -195,8 +211,9 @@ x_collision:
     iny                                      ; offset into path structure for Y (HI)
     lda     (ZP_PATH_PTR),y                  ; get target spatial mask Y (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
-    beq     no_collision                     ; go if sprites do not collide in Y
+    bne     some_collision                   ; go if sprites collide in Y
 
+next_quad_sprite:
     dec     ZP_QUAD_PROJ_INDEX               ; countdown quadrant projectile sprites
     bne     check_spatial_collision          ; go back if more projectiles to check
 
@@ -204,8 +221,8 @@ x_collision:
 
     .endif
 
-no_collision:
-    ; no collision
+keep_rolling:
+    ; no collision, or no need to destroy the sprite
 
     lda     VERA_data0          ; skip 1 byte
     lda     VERA_data0          ; skip 1 byte
