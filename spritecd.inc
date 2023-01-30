@@ -7,21 +7,13 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
 ;-------------------------------------------------------------------
 ; Initialize all sprite positions
 ;-------------------------------------------------------------------
-
-; InitSpriteDefinition: set all sprite definition information
+; CopySpriteXYFields: copy some array fields from RAM to VRAM
 ;
-; This macro expects that ZP_PATH_PTR points to the coordinate pair,
-; and the x register equals the current sprite index (0..127).
+; This macro copies the coordinates from a sprite data structure.
 ;
-.macro InitSpriteDefinition
+.macro CopySpriteXYFields
     .scope
 
-    lda     #<SPRITE_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
-    sta     VERA_data0                   ; set pointer to pixel data (LO)
-
-    lda     #(>SPRITE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
-    sta     VERA_data0                   ; set pointer to pixel data (LO)
- 
     ldy     #0                  ; offset to path X,Y coordinate
     lda     (ZP_PATH_PTR),y     ; get X (LO) from path table
     sta     VERA_data0          ; set X (LO) in VERA
@@ -37,6 +29,25 @@ OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
     iny
     lda     (ZP_PATH_PTR),y     ; get Y (HI) from path table
     sta     VERA_data0          ; set Y (HI) in VERA
+
+    .endscope
+.endmacro
+
+; InitSpriteDefinition: set all sprite definition information
+;
+; This macro expects that ZP_PATH_PTR points to the coordinate pair,
+; and the x register equals the current sprite index (0..127).
+;
+.macro InitSpriteDefinition
+    .scope
+
+    lda     #<SPRITE_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+
+    lda     #(>SPRITE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+ 
+    CopySpriteXYFields
  
     iny
     lda     (ZP_PATH_PTR),y     ; get collision mask from path table
@@ -95,7 +106,7 @@ init_all_sprite_positions:
 
     InitRing sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0
 
-    lda     #4*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 4 path point data structures
+    lda     #5*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 5 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     InitRing sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1
@@ -108,23 +119,90 @@ init_all_sprite_positions:
     rts
 
 ; MoveCoordinatesAndMask: set X,Y coordinates and compute collision mask
+;   is_projectile: indicates whether this sprite is a projectile
 ;
 ; This macro expects that ZP_PATH_PTR points to the coordinate pair,
 ; and the x register equals the current sprite index (0..127).
 ;
-.macro MoveCoordinatesAndMask
+.macro MoveCoordinatesAndMask is_projectile
     .scope
 
     ; check whether this sprite had a collision in the past
     lda     sprite_collision_mask,x ; get the collision mask
-    beq     new_collision       ; go if already hit
+    cmp     #SPRITE_ZDEPTH_ABOVE_L1 ; is this a dead sprite?
+    beq     some_collision      ; go if already hit
 
-    ; check whether this sprite had a collision just now
+    ; check whether this sprite had a quadrant collision just now
     and     ZP_COLLISION_X      ; get the ISR X bits as of the VSYNC time
     beq     no_collision        ; go if nothing happened
     lda     sprite_collision_mask,x ; get the collision mask
     and     ZP_COLLISION_Y      ; get the ISR Y bits as of the VSYNC time
-    bne     new_collision       ; go if something happened
+    beq     no_collision        ; go if nothing happened
+
+    .if .match(is_projectile, 1)
+
+    ; save a pointer to this projectile, for use when moving targets
+    lda     ZP_PATH_PTR_LO              ; get pointer to path structure (LO)
+    sta     (ZP_QUAD_PROJ_ARRAY_PTR)    ; save pointer to path structure (LO)
+    ldy     #1                          ; offset to HI part
+    lda     ZP_PATH_PTR_HI              ; get pointer to path structure (HI)
+    sta     (ZP_QUAD_PROJ_ARRAY_PTR),y  ; save pointer to path structure (HI)
+    inc     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; advance array item pointer (LO)
+    bcc     no_ptr_wrap                 ; go if no overflow
+    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; advance array item pointer (HI)
+no_ptr_wrap:
+    bra     some_collision
+
+    .else ; this sprite is a target, not a projectile
+
+    ; check whether this sprite had a spatial collision just now
+    ; (loop through quadrant projectiles and compare spatial masks)
+
+    lda     ZP_QUAD_PROJ_CNT            ; get number of quadrant projectiles discovered
+    sta     ZP_QUAD_PROJ_INDEX          ; set loop index for traversing quadrant projectiles
+    lda     #<quadrant_projectiles      ; get start of projectile array (LO)
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set start of projectile array (LO)
+    lda     #>quadrant_projectiles      ; get start of projectile array (HI)
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set start of projectile array (HI)
+
+check_spatial_collision:
+    lda     (ZP_QUAD_PROJ_ARRAY_PTR)        ; get pointer to target sprite (LO)
+    sta     ZP_PROJECTILE_PTR_LO            ; set pointer to target sprite (LO)
+    ldy     #1                              ; offset to HI part
+    lda     (ZP_QUAD_PROJ_ARRAY_PTR),y      ; get pointer to target sprite (HI)
+    sta     ZP_PROJECTILE_PTR_HI            ; set pointer to target sprite (HI)
+    inc     ZP_QUAD_PROJ_ARRAY_PTR_LO       ; advance array item pointer (LO)
+    bcc     no_ptr_wrap2                    ; go if no overflow
+    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI       ; advance array item pointer (HI)
+no_ptr_wrap2:
+
+    ldy     #SPRITE_PATH_SPATIAL_MASK_X_LO   ; offset into path structure for X (LO)
+    lda     (ZP_PATH_PTR),y                  ; get target spatial mask X (LO)
+    and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (LO) 
+    bne     x_collision                      ; go if sprites collide in X
+
+    iny                                      ; offset into path structure for X (HI)
+    lda     (ZP_PATH_PTR),y                  ; get target spatial mask X (HI)
+    and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (HI) 
+    beq     no_collision                     ; go if sprites do not collide in X
+x_collision:
+
+    iny                                      ; offset into path structure for Y (LO)
+    lda     (ZP_PATH_PTR),y                  ; get target spatial mask Y (LO)
+    and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (LO) 
+    bne     some_collision                   ; go if sprites collide in Y
+
+    iny                                      ; offset into path structure for Y (HI)
+    lda     (ZP_PATH_PTR),y                  ; get target spatial mask Y (HI)
+    and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
+    beq     no_collision                     ; go if sprites do not collide in Y
+
+    dec     ZP_QUAD_PROJ_INDEX               ; countdown quadrant projectile sprites
+    bne     check_spatial_collision          ; go back if more projectiles to check
+
+    ; check for a collision at the pixel level
+
+    .endif
 
 no_collision:
     ; no collision
@@ -132,21 +210,7 @@ no_collision:
     lda     VERA_data0          ; skip 1 byte
     lda     VERA_data0          ; skip 1 byte
 
-    ldy     #0                  ; offset to path X,Y coordinate
-    lda     (ZP_PATH_PTR),y     ; get X (LO) from path table
-    sta     VERA_data0          ; set X (LO) in VERA
- 
-    iny
-    lda     (ZP_PATH_PTR),y     ; get X (HI) from path table
-    sta     VERA_data0          ; set X (HI) in VERA
-
-    iny
-    lda     (ZP_PATH_PTR),y     ; get Y (LO) from path table
-    sta     VERA_data0          ; set Y (LO) in VERA
- 
-    iny
-    lda     (ZP_PATH_PTR),y     ; get Y (HI) from path table
-    sta     VERA_data0          ; set Y (HI) in VERA
+    CopySpriteXYFields
  
     ; use mask for next path point
     iny
@@ -155,28 +219,14 @@ no_collision:
     sta     sprite_collision_mask,x ; set the collision mask
     bra     have_mask 
  
-new_collision:
+some_collision:
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
     sta     VERA_data0                   ; set pointer to pixel data (LO)
 
     lda     #(>SPRITE_HIT_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
     sta     VERA_data0                   ; set pointer to pixel data (LO)
 
-    ldy     #0                  ; offset to path X,Y coordinate
-    lda     (ZP_PATH_PTR),y     ; get X (LO) from path table
-    sta     VERA_data0          ; set X (LO) in VERA
- 
-    iny
-    lda     (ZP_PATH_PTR),y     ; get X (HI) from path table
-    sta     VERA_data0          ; set X (HI) in VERA
-
-    iny
-    lda     (ZP_PATH_PTR),y     ; get Y (LO) from path table
-    sta     VERA_data0          ; set Y (LO) in VERA
- 
-    iny
-    lda     (ZP_PATH_PTR),y     ; get Y (HI) from path table
-    sta     VERA_data0          ; set Y (HI) in VERA
+    CopySpriteXYFields
  
     ; new collision; change the sprite
     lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
@@ -197,8 +247,9 @@ have_mask:
 ;   sprtend: sprite index no longer on the path
 ;   index:   address of ZP start index into path point array
 ;   points:  number of X,Y coordinates in the path point array
+;   is_projectile: indicates whether this is a ring of projectiles
 ;
-.macro MoveRing path,end,sprtend,index,points
+.macro MoveRing path,end,sprtend,index,points,is_projectile
     .scope
 
     ; increment the array index
@@ -219,7 +270,7 @@ no_index_wrap:
     stz     index+1             ; restart the index (HI)
 not_eor:
 
-    ; multiply the path index by  (size of one X,Y point with masks)
+    ; multiply the path index by 9 (size of one X,Y point with masks)
     lda     index+1             ; get index (HI)
     sta     ZP_TEMP_INDEX_HI    ; save temporary index (HI)
     lda     index               ; get index (LO)
@@ -247,7 +298,7 @@ not_eor:
  
     ; move all of the sprites in this ring
 move_sprite:
-     MoveCoordinatesAndMask
+     MoveCoordinatesAndMask is_projectile
 
     lda     VERA_data0          ; skip 1 byte
  
@@ -299,6 +350,9 @@ move_done:
     .endscope
 .endmacro
 
+PROJECTILE = 1  ; for sprites on the "vertical" ring
+TARGET = 0      ; for sprites on the "horizontal" rings
+
 RING_0_POINTS = ((end_sprite_path_0 - sprite_path_0) / SPRITE_PATH_STRUCT_SIZE)
 RING_1_POINTS = ((end_sprite_path_1 - sprite_path_1) / SPRITE_PATH_STRUCT_SIZE)
 RING_2_POINTS = ((end_sprite_path_2 - sprite_path_2) / SPRITE_PATH_STRUCT_SIZE)
@@ -316,16 +370,22 @@ update_all_sprite_positions:
     lda     #28*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 28 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
-    MoveRing sprite_path_0,end_sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0,RING_0_POINTS
+    lda     #<quadrant_projectiles      ; get start of projectile array (LO)
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set start of projectile array (LO)
+    lda     #>quadrant_projectiles      ; get start of projectile array (HI)
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set start of projectile array (HI)
+    stz     ZP_QUAD_PROJ_CNT            ; assume no quadrant projectiles discovered
 
-    lda     #4*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 4 path point data structures
+    MoveRing sprite_path_0,end_sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0,RING_0_POINTS,PROJECTILE
+
+    lda     #5*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 5 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
-    MoveRing sprite_path_1,end_sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1,RING_1_POINTS
-    MoveRing sprite_path_2,end_sprite_path_2,SPRITE_END_RING_2,ZP_PATH_INDEX_2,RING_2_POINTS
-    MoveRing sprite_path_3,end_sprite_path_3,SPRITE_END_RING_3,ZP_PATH_INDEX_3,RING_3_POINTS
-    MoveRing sprite_path_4,end_sprite_path_4,SPRITE_END_RING_4,ZP_PATH_INDEX_4,RING_4_POINTS
-    MoveRing sprite_path_5,end_sprite_path_5,SPRITE_END_RING_5,ZP_PATH_INDEX_5,RING_5_POINTS
-    MoveRing sprite_path_6,end_sprite_path_6,SPRITE_END_RING_6,ZP_PATH_INDEX_6,RING_6_POINTS
-    MoveRing sprite_path_7,end_sprite_path_7,SPRITE_END_RING_7,ZP_PATH_INDEX_7,RING_7_POINTS
+    MoveRing sprite_path_1,end_sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1,RING_1_POINTS,TARGET
+    MoveRing sprite_path_2,end_sprite_path_2,SPRITE_END_RING_2,ZP_PATH_INDEX_2,RING_2_POINTS,TARGET
+    MoveRing sprite_path_3,end_sprite_path_3,SPRITE_END_RING_3,ZP_PATH_INDEX_3,RING_3_POINTS,TARGET
+    MoveRing sprite_path_4,end_sprite_path_4,SPRITE_END_RING_4,ZP_PATH_INDEX_4,RING_4_POINTS,TARGET
+    MoveRing sprite_path_5,end_sprite_path_5,SPRITE_END_RING_5,ZP_PATH_INDEX_5,RING_5_POINTS,TARGET
+    MoveRing sprite_path_6,end_sprite_path_6,SPRITE_END_RING_6,ZP_PATH_INDEX_6,RING_6_POINTS,TARGET
+    MoveRing sprite_path_7,end_sprite_path_7,SPRITE_END_RING_7,ZP_PATH_INDEX_7,RING_7_POINTS,TARGET
     rts
