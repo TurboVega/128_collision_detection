@@ -192,23 +192,25 @@ check_spatial_collision:
     inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set array item pointer (HI)
 no_ptr_wrap2:
 
-    ldy     #SPRITE_PATH_SPATIAL_MASK_X_LO   ; offset into path structure for X (LO)
+    ldy     #SPRITE_PATH_SPATIAL_MASK_X_LO   ; offset into path structure for mask X (LO)
     lda     (ZP_PATH_PTR),y                  ; get target spatial mask X (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (LO) 
-    bne     x_collision                      ; go if sprites collide in X
-
-    iny                                      ; offset into path structure for X (HI)
+    beq     check_x_hi                       ; go if no collision in X (LO)
+    iny                                      ; offset into path structure for mask X (HI)
+    bra     x_collision                      ; go if sprites collide in X
+check_x_hi:
+    iny                                      ; offset into path structure for mask X (HI)
     lda     (ZP_PATH_PTR),y                  ; get target spatial mask X (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (HI) 
     beq     next_quad_sprite                 ; go if sprites do not collide in X
 x_collision:
 
-    iny                                      ; offset into path structure for Y (LO)
+    iny                                      ; offset into path structure for mask Y (LO)
     lda     (ZP_PATH_PTR),y                  ; get target spatial mask Y (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (LO) 
     bne     some_collision                   ; go if sprites collide in Y
 
-    iny                                      ; offset into path structure for Y (HI)
+    iny                                      ; offset into path structure for mask Y (HI)
     lda     (ZP_PATH_PTR),y                  ; get target spatial mask Y (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
     bne     some_collision                   ; go if sprites collide in Y
