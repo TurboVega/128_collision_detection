@@ -106,7 +106,7 @@ init_all_sprite_positions:
 
     InitRing sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0
 
-    lda     #7*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 7 path point data structures
+    lda     #9*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 9 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     InitRing sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1
@@ -121,21 +121,17 @@ init_all_sprite_positions:
 ; MoveCoordinatesAndMask: set X,Y coordinates and compute collision mask
 ;   path:    address of path point array
 ;   end:     address after end of path point array
-;   is_projectile: indicates whether this sprite is a projectile
 ;
 ; This macro expects that ZP_PATH_PTR points to the path structure,
 ; and the x register equals the current sprite index (0..127).
 ;
-.macro MoveCoordinatesAndMask path,end,is_projectile
+.macro MoveCoordinatesAndMask path,end
     .scope
 
     ; check whether this sprite had a collision in the past
     lda     sprite_collision_mask,x ; get the old collision mask
     cmp     #SPRITE_ZDEPTH_ABOVE_L1 ; is this a dead sprite?
     bne     sprite_active           ; go if no (still alive)
-  lda #$22
-  sta $66 
-
     jmp     some_collision          ; go if already hit
 sprite_active:
 
@@ -177,8 +173,8 @@ not_start:
 
 use_old_path_ptr:
 
-    .if is_projectile = 1
- crap1
+    .if .not(.defined(TARGET))
+ 
     ; save a pointer to this projectile, for use when moving targets
     lda     ZP_OLD_PATH_PTR_LO          ; get old pointer to path structure (LO)
     sta     (ZP_QUAD_PROJ_ARRAY_PTR)    ; save old pointer to path structure (LO)
@@ -198,8 +194,8 @@ no_ptr_wrap:
  
     .endif
 
-    .if is_projectile = 0
-crap2
+    .if .defined(TARGET)
+
     ; this sprite is a target, not a projectile
 
     ; check whether this sprite had a spatial collision just now
@@ -228,11 +224,6 @@ check_spatial_collision:
     adc     #0
     inc     ZP_QUAD_PROJ_ARRAY_PTR_HI       ; set array item pointer (HI)
 
- stx $67
- lda #is_projectile
- ora #$90
- sta $68
-
     ldy     #SPRITE_PATH_SPATIAL_MASK_X_LO   ; offset into path structure for mask X (LO)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask X (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (LO) 
@@ -245,22 +236,16 @@ check_x_hi:
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask X (HI) 
     beq     next_quad_sprite                 ; go if sprites do not collide in X
 x_collision:
- lda #$44
-  sta $66 
 
     iny                                      ; offset into path structure for mask Y (LO)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (LO) 
     bne     some_collision                   ; go if sprites collide in Y
- lda #$55
-  sta $66 
 
     iny                                      ; offset into path structure for mask Y (HI)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
     bne     some_collision                   ; go if sprites collide in Y
- lda #$33
-  sta $66 
 
 next_quad_sprite:
     dec     ZP_QUAD_PROJ_INDEX               ; countdown quadrant projectile sprites
@@ -284,10 +269,9 @@ keep_rolling:
     sta     sprite_collision_mask,x ; set the collision mask
     sta     VERA_data0          ; set collision mask in VERA
     bra     have_mask 
- lda #$11
-  sta $66 
+
 some_collision:
- brk
+ 
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
     sta     VERA_data0                   ; set pointer to pixel data (LO)
 
@@ -317,9 +301,8 @@ have_mask:
 ;   sprtend: sprite index no longer on the path
 ;   index:   address of ZP start index into path point array
 ;   points:  number of X,Y coordinates in the path point array
-;   is_projectile: indicates whether this is a ring of projectiles
 ;
-.macro MoveRing path,end,sprtend,index,points,is_projectile
+.macro MoveRing path,end,sprtend,index,points
     .scope
 
     ; increment the array index
@@ -368,7 +351,7 @@ not_eor:
  
     ; move all of the sprites in this ring
 move_sprite:
-     MoveCoordinatesAndMask path,end,is_projectile
+     MoveCoordinatesAndMask path,end
 
     ; leave some space between sprites
     lda     ZP_PATH_PTR_LO
@@ -418,11 +401,6 @@ move_done:
     .endscope
 .endmacro
 
-; for sprites on the "vertical" ring
-PROJECTILE = 1
-; for sprites on the "horizontal" rings
-TARGET = 0
-
 RING_0_POINTS = ((end_sprite_path_0 - sprite_path_0) / SPRITE_PATH_STRUCT_SIZE)
 RING_1_POINTS = ((end_sprite_path_1 - sprite_path_1) / SPRITE_PATH_STRUCT_SIZE)
 RING_2_POINTS = ((end_sprite_path_2 - sprite_path_2) / SPRITE_PATH_STRUCT_SIZE)
@@ -446,16 +424,19 @@ update_all_sprite_positions:
     sta     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set start of projectile array (HI)
     stz     ZP_QUAD_PROJ_CNT            ; assume no quadrant projectiles discovered
 
-;    MoveRing sprite_path_0,end_sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0,RING_0_POINTS,PROJECTILE
+    MoveRing sprite_path_0,end_sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0,RING_0_POINTS
 
-    lda     #7*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 7 path point data structures
+    lda     #9*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 9 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
-    MoveRing sprite_path_1,end_sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1,RING_1_POINTS,TARGET
-;    MoveRing sprite_path_2,end_sprite_path_2,SPRITE_END_RING_2,ZP_PATH_INDEX_2,RING_2_POINTS,TARGET
-;    MoveRing sprite_path_3,end_sprite_path_3,SPRITE_END_RING_3,ZP_PATH_INDEX_3,RING_3_POINTS,TARGET
-;    MoveRing sprite_path_4,end_sprite_path_4,SPRITE_END_RING_4,ZP_PATH_INDEX_4,RING_4_POINTS,TARGET
-;    MoveRing sprite_path_5,end_sprite_path_5,SPRITE_END_RING_5,ZP_PATH_INDEX_5,RING_5_POINTS,TARGET
-;    MoveRing sprite_path_6,end_sprite_path_6,SPRITE_END_RING_6,ZP_PATH_INDEX_6,RING_6_POINTS,TARGET
-;    MoveRing sprite_path_7,end_sprite_path_7,SPRITE_END_RING_7,ZP_PATH_INDEX_7,RING_7_POINTS,TARGET
+; for sprites on the "horizontal" rings
+TARGET = 1
+
+    MoveRing sprite_path_1,end_sprite_path_1,SPRITE_END_RING_1,ZP_PATH_INDEX_1,RING_1_POINTS
+    MoveRing sprite_path_2,end_sprite_path_2,SPRITE_END_RING_2,ZP_PATH_INDEX_2,RING_2_POINTS
+    MoveRing sprite_path_3,end_sprite_path_3,SPRITE_END_RING_3,ZP_PATH_INDEX_3,RING_3_POINTS
+    MoveRing sprite_path_4,end_sprite_path_4,SPRITE_END_RING_4,ZP_PATH_INDEX_4,RING_4_POINTS
+    MoveRing sprite_path_5,end_sprite_path_5,SPRITE_END_RING_5,ZP_PATH_INDEX_5,RING_5_POINTS
+    MoveRing sprite_path_6,end_sprite_path_6,SPRITE_END_RING_6,ZP_PATH_INDEX_6,RING_6_POINTS
+    MoveRing sprite_path_7,end_sprite_path_7,SPRITE_END_RING_7,ZP_PATH_INDEX_7,RING_7_POINTS
     rts
