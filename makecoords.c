@@ -1,3 +1,7 @@
+// File: makecoords.c
+// Purpose: Make table of X,Y coordinates and related sprite path data
+// Copyright (c) 2023 by Curtis Whitley
+
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
