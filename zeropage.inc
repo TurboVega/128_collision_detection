@@ -8,6 +8,10 @@ ZP_PROJECTILE_PTR    = $32   ; used to loop through projectile sprites
 ZP_PROJECTILE_PTR_LO = $32
 ZP_PROJECTILE_PTR_HI = $33
 
+ZP_OLD_PATH_PTR      = $34   ; used to point into any sprite path, at old position
+ZP_OLD_PATH_PTR_LO   = $34
+ZP_OLD_PATH_PTR_HI   = $35
+
 ZP_TEMP_INDEX     = $3A      ; temporary index of coordinates on sprite path
 ZP_TEMP_INDEX_LO  = $3A
 ZP_TEMP_INDEX_HI  = $3B
