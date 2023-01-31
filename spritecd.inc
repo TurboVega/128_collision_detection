@@ -240,12 +240,12 @@ x_collision:
     iny                                      ; offset into path structure for mask Y (LO)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (LO) 
-    bne     some_collision                   ; go if sprites collide in Y
+    bne     new_collision                    ; go if sprites collide in Y
 
     iny                                      ; offset into path structure for mask Y (HI)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
-    bne     some_collision                   ; go if sprites collide in Y
+    bne     new_collision                    ; go if sprites collide in Y
 
 next_quad_sprite:
     dec     ZP_QUAD_PROJ_INDEX               ; countdown quadrant projectile sprites
@@ -270,6 +270,7 @@ keep_rolling:
     sta     VERA_data0          ; set collision mask in VERA
     bra     have_mask 
 
+new_collision:    
 some_collision:
  
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
