@@ -329,7 +329,7 @@ dx_is_nonnegative:
     bne     keep_rolling                     ; go if DX >= 32
 
     ; index the sprite_hit_decision table to see if the sprites collide
- brk
+ 
     ; the table is indexed as sprite_hit_decision[dy][dx], so we must mutliply
     ; DY by 32, and add DX, to get the proper table index.
     lda     ZP_TEMP_INDEX_LO                 ; get temporary index (LO)
@@ -393,7 +393,7 @@ some_collision:
     lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
     sta     sprite_collision_mask,x ; set initial sprite state
     sta     VERA_data0              ; show sprite, but prevent collision
- brk
+ 
 have_mask:
  
     lda     VERA_data0              ; skip 1 byte (sprite width, height, etc.)
