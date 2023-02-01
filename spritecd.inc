@@ -1,8 +1,6 @@
 ; File: spritecd.inc
 ; Purpose: Sprite initialization and movement code
-
-; offset allows using Y register to index both structures
-OFFSET = SPRITE_X_LO - SPRITE_PATH_X_LO
+; Copyright (c) 2023 by Curtis Whitley
 
 ;-------------------------------------------------------------------
 ; Initialize all sprite positions
@@ -174,6 +172,8 @@ not_start:
 use_old_path_ptr:
 
     .if .not(.defined(TARGET))
+
+    ; this sprite is a projectile, not a target
  
     ; save a pointer to this projectile, for use when moving targets
     lda     ZP_OLD_PATH_PTR_LO          ; get old pointer to path structure (LO)
@@ -252,6 +252,48 @@ next_quad_sprite:
     bne     check_spatial_collision          ; go back if more projectiles to check
 
     ; check for a collision at the pixel level
+    ; given target coordinates (tx, ty) via ZP_OLD_PATH_PTR
+    ; given projectile coordinates (px, py) via ZP_PROJECTILE_PTR
+    ;
+    ; dy = ty - py
+    ; if dy < 0, then dy += 32
+    ; if dy >= 32, stop (no collision)
+    ;
+    ; dx = tx - px
+    ; if dx < 0, then dx += 32
+    ; if dx >= 32, stop (no collision)
+    ;
+
+    ; compute and possibly adjust delta Y (DY)
+
+    ldy     #SPRITE_PATH_Y_LO                ; offset to Y (LO) in path structure
+    lda     (ZP_OLD_PATH_PTR),y              ; get target Y (LO)
+    sec
+    sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (LO)
+    sta     (ZP_DELTA_Y_LO)                  ; save delta Y (LO)
+
+    iny                                      ; offset to Y (HI) in path structure
+    lda     (ZP_OLD_PATH_PTR),y              ; get target Y (HI)
+    sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (HI)
+    sta     (ZP_DELTA_Y_HI)                  ; save delta Y (HI)
+    bpl     dy_is_nonnegative                ; go if no need to adjust DY
+
+    lda     (ZP_DELTA_Y_LO)                  ; get delta Y (LO)
+    clc
+    adc     #32                              ; adjust DY (LO) 
+    sta     (ZP_DELTA_Y_LO)                  ; save delta Y (LO)
+    lda     (ZP_DELTA_Y_HI)                  ; get delta Y (HI)
+    adc     #0                               ; adjust DY (HI)
+    sta     (ZP_DELTA_Y_HI)                  ; save delta Y (HI)
+dy_is_nonnegative:
+    
+    ; make sure DY is not too big (or sprites cannot collide)
+
+    ; compute and possibly adjust delta Y (DY)
+
+    ; make sure DY is not too big (or sprites cannot collide)
+
+    ; index the sprite_hit_decision table to see if the sprites collide
 
     .endif
 

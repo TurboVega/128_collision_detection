@@ -1,7 +1,7 @@
-; Program: Fruit Salad
+; Program: DEMO128C
 ; File: demo128.asm
-; Purpose: Show 128 sprites moving simultaneously
-; By: Curtis Whitley
+; Purpose: Show 128 sprites moving simultaneously, with collision detection
+; Copyright (C) 2023 by Curtis Whitley
 ;
 
 .org $080D
@@ -14,14 +14,13 @@
 
    jmp start      ; skip the data definitions, and go to code
 
-; This file must align on a 16-byte boundary!
 .include "pathpts.inc"
-
 .include "x16.inc"
 .include "zeropage.inc"
 .include "macros.inc"
 .include "spritepx.inc"
 .include "spritedt.inc"
+.include "hit_decisions.inc"
 .include "spritecd.inc"
 
 default_irq_vector: .addr 0
@@ -52,7 +51,7 @@ start:
 
     jsr     init_all_sprite_positions
 
-    RAM2VRAM sprite_bitmap, SPRITE_BITMAP_ADDR, SPRITE_BITMAP_SIZE
+    RAM2VRAM sprite_bitmap, SPRITE_BITMAP_ADDR, (SPRITE_BITMAP_SIZE*2)
 
     lda     #$71            ; sprites, L1, L0, VGA
     sta     VERA_dc_video

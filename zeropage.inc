@@ -16,6 +16,14 @@ ZP_TEMP_INDEX     = $3A      ; temporary index of coordinates on sprite path
 ZP_TEMP_INDEX_LO  = $3A
 ZP_TEMP_INDEX_HI  = $3B
 
+ZP_DELTA_X          = $3C    ; X difference between 2 sprites
+ZP_DELTA_X_LO       = $3C
+ZP_DELTA_X_HI       = $3D
+
+ZP_DELTA_Y          = $3E    ; Y difference between 2 sprites
+ZP_DELTA_Y_LO       = $3E
+ZP_DELTA_Y_HI       = $3F
+
 ZP_PATH_INDEX_0     = $40    ; index of coordinates on sprite path #0
 ZP_PATH_INDEX_0_LO  = $40
 ZP_PATH_INDEX_0_HI  = $41
@@ -60,11 +68,8 @@ ZP_PATH_PTR       = $54    ; used to point into any sprite path
 ZP_PATH_PTR_LO    = $54
 ZP_PATH_PTR_HI    = $55
 
-;ZP_ISR_REG        = $56    ; holds a temporary copy of ISR register contents
-;ZP_COLLISION_MASK = $57    ; used to compute or use a collision mask
-;ZP_TEMP_VAR       = $58    ; holds a temporary value
 ZP_NEXT_SPRITE_INC = $59   ; increment to reach next sprite data item for gapping
-ZP_COLLISION_X    = $5A    ; copy of ISR register collision bits for X (left vs right)
-ZP_COLLISION_Y    = $5B    ; copy of ISR register collision bits for Y (top vs bottom)
-ZP_QUAD_PROJ_CNT  = $5C    ; quadrant projectile count
+ZP_COLLISION_X     = $5A   ; copy of ISR register collision bits for X (left vs right)
+ZP_COLLISION_Y     = $5B   ; copy of ISR register collision bits for Y (top vs bottom)
+ZP_QUAD_PROJ_CNT   = $5C   ; quadrant projectile count
 ZP_QUAD_PROJ_INDEX = $5D   ; index for looping through quadrant projectiles
