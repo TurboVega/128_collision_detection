@@ -39,11 +39,17 @@
 .macro InitSpriteDefinition
     .scope
 
-    lda     #<SPRITE_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    cpx     #SPRITE_RING_COUNT_0        ; are we doing the first ring?
+    bmi     first_ring                  ; go if yes
+    lda     #<SPRITE_TARGET_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    ldy     #(>SPRITE_TARGET_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+    bra     set_address
+first_ring:
+    lda     #<SPRITE_PROJECTILE_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    ldy     #(>SPRITE_PROJECTILE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+set_address:
     sta     VERA_data0                   ; set pointer to pixel data (LO)
-
-    lda     #(>SPRITE_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
-    sta     VERA_data0                   ; set pointer to pixel data (HI)
+    sty     VERA_data0                   ; set pointer to pixel data (HI)
  
     CopySpriteXYFields
  
@@ -202,7 +208,7 @@ no_ptr_wrap:
     ; (loop through quadrant projectiles and compare spatial masks)
 
     lda     ZP_QUAD_PROJ_CNT                ; get number of quadrant projectiles discovered
-    beq     keep_rolling                    ; go if no projectile has a collision
+    beq     keep_rolling2                   ; go if no projectile has a collision
     sta     ZP_QUAD_PROJ_INDEX              ; set loop index for traversing quadrant projectiles
     lda     #<quadrant_projectiles          ; get start of projectile array (LO)
     sta     ZP_QUAD_PROJ_ARRAY_PTR_LO       ; set start of projectile array (LO)
@@ -240,12 +246,14 @@ x_collision:
     iny                                      ; offset into path structure for mask Y (LO)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (LO) 
-    bne     new_collision                    ; go if sprites collide in Y
-
+    beq     check_y_hi                       ; go if no collision in Y (LO)
+new_collision2:
+    jmp     new_collision                    ; go if sprites collide in Y
+check_y_hi:
     iny                                      ; offset into path structure for mask Y (HI)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
-    bne     new_collision                    ; go if sprites collide in Y
+    bne     new_collision2                   ; go if sprites collide in Y
 
 next_quad_sprite:
     dec     ZP_QUAD_PROJ_INDEX               ; countdown quadrant projectile sprites
@@ -270,30 +278,88 @@ next_quad_sprite:
     lda     (ZP_OLD_PATH_PTR),y              ; get target Y (LO)
     sec
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (LO)
-    sta     (ZP_DELTA_Y_LO)                  ; save delta Y (LO)
+    sta     ZP_DELTA_Y_LO                    ; save delta Y (LO)
 
     iny                                      ; offset to Y (HI) in path structure
     lda     (ZP_OLD_PATH_PTR),y              ; get target Y (HI)
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (HI)
-    sta     (ZP_DELTA_Y_HI)                  ; save delta Y (HI)
+    sta     ZP_DELTA_Y_HI                    ; save delta Y (HI)
     bpl     dy_is_nonnegative                ; go if no need to adjust DY
 
-    lda     (ZP_DELTA_Y_LO)                  ; get delta Y (LO)
+    lda     ZP_DELTA_Y_LO                    ; get delta Y (LO)
     clc
     adc     #32                              ; adjust DY (LO) 
-    sta     (ZP_DELTA_Y_LO)                  ; save delta Y (LO)
-    lda     (ZP_DELTA_Y_HI)                  ; get delta Y (HI)
+    sta     ZP_DELTA_Y_LO                    ; save delta Y (LO)
+    lda     ZP_DELTA_Y_HI                    ; get delta Y (HI)
     adc     #0                               ; adjust DY (HI)
-    sta     (ZP_DELTA_Y_HI)                  ; save delta Y (HI)
+    sta     ZP_DELTA_Y_HI                    ; save delta Y (HI)
+    sta     ZP_TEMP_INDEX_HI                 ; save temporary index (HI)
+    bmi     keep_rolling                     ; go if DY is still negative
 dy_is_nonnegative:
-    
-    ; make sure DY is not too big (or sprites cannot collide)
+    lda     ZP_DELTA_Y_LO                    ; get delta Y (LO)
+    sta     ZP_TEMP_INDEX_LO                 ; save temporary index (LO)
+    and     #$E0                             ; make sure it's below 32
+    bne     keep_rolling                     ; go if DY >= 32
 
-    ; compute and possibly adjust delta Y (DY)
+    ; compute and possibly adjust delta X (DX)
 
-    ; make sure DY is not too big (or sprites cannot collide)
+    ldy     #SPRITE_PATH_X_LO                ; offset to X (LO) in path structure
+    lda     (ZP_OLD_PATH_PTR),y              ; get target X (LO)
+    sec
+    sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile X (LO)
+    sta     ZP_DELTA_X_LO                    ; save delta X (LO)
+
+    iny                                      ; offset to X (HI) in path structure
+    lda     (ZP_OLD_PATH_PTR),y              ; get target X (HI)
+    sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile X (HI)
+    sta     ZP_DELTA_X_HI                    ; save delta X (HI)
+    bpl     dx_is_nonnegative                ; go if no need to adjust DX
+
+    lda     ZP_DELTA_X_LO                    ; get delta X (LO)
+    clc
+    adc     #32                              ; adjust DX (LO) 
+    sta     ZP_DELTA_X_LO                    ; save delta X (LO)
+    lda     ZP_DELTA_X_HI                    ; get delta X (HI)
+    adc     #0                               ; adjust DX (HI)
+    sta     ZP_DELTA_X_HI                    ; save delta X (HI)
+    bmi     keep_rolling                     ; go if DX is still negative
+dx_is_nonnegative:
+    lda     ZP_DELTA_X_LO                    ; get delta X (LO)
+    and     #$E0                             ; make sure it's below 32
+    bne     keep_rolling                     ; go if DX >= 32
 
     ; index the sprite_hit_decision table to see if the sprites collide
+ brk
+    ; the table is indexed as sprite_hit_decision[dy][dx], so we must mutliply
+    ; DY by 32, and add DX, to get the proper table index.
+    lda     ZP_TEMP_INDEX_LO                 ; get temporary index (LO)
+    asl                                      ; multiply DY by 2
+    rol     ZP_TEMP_INDEX_HI
+    asl                                      ; multiply DY by 2
+    rol     ZP_TEMP_INDEX_HI
+    asl                                      ; multiply DY by 2
+    rol     ZP_TEMP_INDEX_HI
+    asl                                      ; multiply DY by 2
+    rol     ZP_TEMP_INDEX_HI
+    asl                                      ; multiply DY by 2
+    rol     ZP_TEMP_INDEX_HI
+    clc                                      ; add DX to DY*32
+    adc     ZP_DELTA_X_LO
+    bcc     no_table_wrap
+    inc     ZP_TEMP_INDEX_HI
+no_table_wrap:
+
+    ; add the start of the table, to get the address of the array element
+    clc
+    adc     #<sprite_hit_decision            ; add table start to index (LO)
+    sta     ZP_TEMP_INDEX_LO                 ; save array element address (LO)
+    lda     ZP_TEMP_INDEX_HI                    ; get table index (HI)
+    adc     #>sprite_hit_decision            ; add table start to index (HI)
+    sta     ZP_TEMP_INDEX_HI                 ; save array element address (HI)
+
+    ; get the collision indicator from the table
+    lda     (ZP_TEMP_INDEX)
+    bne     new_collision                    ; go if a collision at pixel level
 
     .endif
 
@@ -312,7 +378,7 @@ keep_rolling:
     sta     VERA_data0          ; set collision mask in VERA
     bra     have_mask 
 
-new_collision:    
+new_collision: 
 some_collision:
  
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
@@ -327,6 +393,7 @@ some_collision:
     lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
     sta     sprite_collision_mask,x ; set initial sprite state
     sta     VERA_data0              ; show sprite, but prevent collision
+ brk
 have_mask:
  
     lda     VERA_data0              ; skip 1 byte (sprite width, height, etc.)
