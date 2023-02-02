@@ -168,6 +168,7 @@ keep_rolling2:
 
 not_start:
     ; the old (prior) path pointer is one slot prior to the current pointer
+    lda     ZP_PATH_PTR_LO              ; get pointer to path structure (LO)
     sec                                 ; prepare to subtract structure size
     sbc     #<SPRITE_PATH_STRUCT_SIZE   ; subtract structure size (LO)
     sta     ZP_OLD_PATH_PTR_LO          ; save pointer to prior item (LO)
@@ -193,7 +194,7 @@ use_old_path_ptr:
     clc
     adc     #2                          ; sizeof a pointer
     sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set array item pointer (LO)
-    bne     no_ptr_wrap                 ; go if no overflow
+    bcc     no_ptr_wrap                 ; go if no overflow
     inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set array item pointer (HI)
 no_ptr_wrap:
     ; fall through to keep_rolling
@@ -378,7 +379,7 @@ keep_rolling:
     sta     VERA_data0          ; set collision mask in VERA
     bra     have_mask 
 
-new_collision: 
+new_collision:
 some_collision:
  
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
