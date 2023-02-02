@@ -247,18 +247,17 @@ x_collision:
     iny                                      ; offset into path structure for mask Y (LO)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (LO)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (LO) 
-    beq     check_y_hi                       ; go if no collision in Y (LO)
-new_collision2:
-    jmp     new_collision                    ; go if sprites collide in Y
-check_y_hi:
+    bne     y_collision                      ; go if sprites collide in Y, spatially
     iny                                      ; offset into path structure for mask Y (HI)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask Y (HI)
     and     (ZP_PROJECTILE_PTR),y            ; compare to projectile spatial mask Y (HI) 
-    bne     new_collision2                   ; go if sprites collide in Y
+    bne     y_collision                      ; go if sprites collide in Y, spatially
 
 next_quad_sprite:
     dec     ZP_QUAD_PROJ_INDEX               ; countdown quadrant projectile sprites
     bne     check_spatial_collision          ; go back if more projectiles to check
+    bra     keep_rolling2                    ; there is no collision
+y_collision:
 
     ; check for a collision at the pixel level
     ; given target coordinates (tx, ty) via ZP_OLD_PATH_PTR
@@ -380,13 +379,17 @@ keep_rolling:
     bra     have_mask 
 
 new_collision:
-some_collision:
- 
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
-    sta     VERA_data0                   ; set pointer to pixel data (LO)
+    ldy     #(>SPRITE_HIT_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+    bra     set_sprite_color    ; go set sprite color
 
-    lda     #(>SPRITE_HIT_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+some_collision:
+    lda     #<SPRITE_DEAD_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
+    ldy     #(>SPRITE_DEAD_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+
+set_sprite_color:
     sta     VERA_data0                   ; set pointer to pixel data (LO)
+    sty     VERA_data0                   ; set pointer to pixel data (HI)
 
     CopySpriteXYFields
  

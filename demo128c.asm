@@ -51,7 +51,7 @@ start:
 
     jsr     init_all_sprite_positions
 
-    RAM2VRAM sprite_bitmap, SPRITE_BITMAP_ADDR, (SPRITE_BITMAP_SIZE*2)
+    RAM2VRAM sprite_target_bitmap, SPRITE_TARGET_BITMAP_ADDR, (SPRITE_BITMAP_SIZE*4)
 
     lda     #$71            ; sprites, L1, L0, VGA
     sta     VERA_dc_video
