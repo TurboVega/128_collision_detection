@@ -1,11 +1,28 @@
 # 128_collision_detection
-Demo of moving 128 sprites with collision detected, for Commander X16
+<b>Demo of moving 128 sprites with collision detection, for Commander X16</b>
 
 This is the second part of a 2-part demo, where the code handles
 collision detection with 128 moving sprites. This particular repository
 has code that shows 128 sprites moving in concentric elliptical
 paths (that I called rings). There is now collision detection
 in this code.
+
+To make the movement of so many objects as smooth as possible, I have attempted
+to reduce the computations required during each screen frame (i.e., during the
+blanking time indicated by the VERA VSYNC interrupt). The method for reducing
+the computations at runtime is simple: perform most of the computations ahead
+of time, and keep the results in tables. This includes:
+
+* The X and Y coordinates of every sprite position on every ring (elliptical path).
+Keeping this data in a table eliminates the sin() and cos() computations at runtime.
+* The decisions of whether a projectile collides with a target based on their
+relative distance from each other. Keeping this data in a table eliminates the
+pixel-level comparison operations at runtime.
+
+<b>Please be aware that I have traded memory for CPU cycles, meaning that the
+pre-computed table data requires a lot of memory!</b>
+
+Here are some more details about the chosen algorithms in this program.
 
 ```
 Sprites by indexes:
@@ -22,11 +39,12 @@ Approach on collision detection:
 
 The idea is to combine several optimizations to yield reasonable speed
 for detecting sprite collisions, when so many objects are on the screen.
-This <i>could</i> involve one or more of several methods:
+This involves a series (combination) of several methods:
 
- 1. Let the VERA <b>hardware</b> detect the collision <i>quadrants</i>, rather than
-    detecting which <i>kinds</i> of sprites collided. This implies dividing
-    the screen into 4 logical parts, since there are 4 collision bits available.
+ 1. Let the VERA hardware detect the collision quadrants, rather than
+    detecting which kinds of sprites collided. This implies dividing
+    the screen into 4 logical parts, since there are 4 collision bits
+    available in VERA.
 
     a. First collision mask bit represents left half of screen.
        Sprite attribute offset 6: [---Czdvh]
@@ -68,62 +86,33 @@ This <i>could</i> involve one or more of several methods:
 
        If the formula equals zero (or false), the sprite in question is not
        within any quadrant of the collision. Check it no further.
+       
+       Bear in mind that multiple quadrants may be indicated simulatneously.
 
- 2. Create lists of projectiles and targets within detected quadrants.
-    For sprites passing the check in paragraph #1.l, above, keep 4 lists,
-    or however many are appropriate for the game or demo program.
+ 2. Create a list of projectiles within detected quadrants (meaning
+    quadrants where collisions are detected). Projectiles not found
+    in detected quadrants may be ignored when evaluating targets.
 
-    a. player projectiles: things the player shoots/throws/etc.
-    b. enemy targets: things the player destroys/acquires/etc.
-    c. enemy projectiles: things the enemy shoots/throws/etc.
-    d. player targets: usually the player ship/avatar/etc.
+ 3. Loop through all target sprites in order to update their movement
+    and appearances. In many applications, targets might be destroyed and
+    removed from the screen. In this application, they continue to move,
+    but with a color indicating their having been hit by projectiles.
+    
+    a. If any targets have already had collisions, do not make any
+    further collision detection testing for them; just keep moving
+    them (in this particular program, anyway).
 
-    For optimization, if there is only ever 1 item, such as for a player
-    avatar target, no list is needed; target use can be hard-coded. If a target
-    can be destroyed both by an enemy and by a player, that scenario must be
-    handled. Essentially, we are trying to handle all cases where sprite A
-    affects sprite B in some way, when A collides with B, or vice versa.
-    We must always avoid comparing sprites that are never to considered
-    as having a collision, since that would waste CPU cycles.
+    b. For targets not colliding with projectiles earlier, loop through
+       the list of detected projectiles, and compare spatial maps, by
+       AND-ing the map values. If the result is zero, there is no
+       collision for that particular projectile and target.
+       If the result of any AND operation is nonzero, then there is a
+       spatial collision. 
 
- 3. For sprites making it into the lists in section 2, above, check their
-    bounding boxes to see whether they could possibly collide. There are
-    various ways to accomplish this, such as:
-
-    a. Compute and compare the ranges of X and Y, based on sprite sizes,
-       to see if there is any possible overlap in both directions. This
-       is an easy check, but because X and Y are potentially larger than
-       8 bits, it becomes computationally expensive to perform all of
-       the required additions, subtractions, and comparisons.
-
-    b. Keep spatial maps for sprites, as they move, then AND the map
-       values to see whether they overlap. The final check may be easy,
-       but maintaining the maps is expensive, particularly when sprites
-       spend most of their time not colliding.
-
-    c. Precompute the possible spatial maps, based on X or Y positions
-       and sprite sizes, and use lookup tables to obtain the map bits
-       for each sprite. Then, AND the values together to check for any
-       possibility of collision. The precision of the check depends on
-       the number of bits per spatial map (i.e., it determines the
-       granularity of the horizontal or vertical grid cells). More bits
-       is more accurate, but also takes up more memory.
-
-    d. Precompute the detection results, and use lookup tables to determine
-       whether sprites could collide. Tables can be used for either
-       dimension (X or Y), but there must be a unique table for each
-       combination of sprite sizes where a collision may occur (e.g.,
-       a table for 8x8, for 8x16, for 16x16, etc). The amount of memory
-       required depends on the precision of each index (i.e., the values
-       by which X and/or Y are divided, in order to form table indexes).
-
-    e. In this program, we use method 3.c, above, with the following
-       related considerations:
-
-       (1) Each spatial map is 16 bits long, so the screen is horizontally
+       (1) Each X spatial map is 16 bits long, so the screen is horizontally
            divided into 16 spatial grid columns, each 640/16=40 pixels wide.
 
-       (2) Each spatial map is 16 bits long, so the screen is vertically
+       (2) Each Y spatial map is 16 bits long, so the screen is vertically
            divided into 16 spatial grid rows, each 480/16=30 pixels high.
 
        (3) An 8-, 16-, or 32-bit wide sprite may need 2 consecutive X map bits. 
@@ -132,25 +121,14 @@ This <i>could</i> involve one or more of several methods:
        (6) A 32-bit tall sprite may need 3 consecutive Y map bits. 
        (7) A 64-bit tall sprite may need 4 consecutive Y map bits.
 
-       (8) Do a double loop comparing <i>player</i> projectiles to <i>enemy</i> targets.
-           For each pair, AND their 16-bit spatial masks. If the result is zero,
-           check that sprite pair no further. Otherwise, check in more detail
-           (see paragraph 4, below).
+       Note: This program only uses 16x16 sprites.
 
-       (9) Do a double loop comparing <i>enemy</i> projectiles to <i>player</i> targets.
-           For each pair, AND their 16-bit masks. If the result is zero,
-           check that pair no further. Otherwise, check in more detail
-           (see paragraph 4, below).
+    c. For targets involved in spatial collisions, lookup the proper item
+       in the pixel-level decision table, based on the X and Y coordinates
+       of the target and the projectile. If the table item value is
+       nonzero, then there is a pixel-level collision. The lookup indexe
+       are relative, not absolute, so DX and DY are used, not the actual
+       X and Y coordinates. This is necessary to keep the size of the
+       decision table within reasonable memory limits.
 
- 4. Perform detailed checks for a minimal number of sprites, meaning
-    only those sprite pairs that passed the checks in paragraphs 3.e.(8)
-    or 3.e.(9), above. Detailed checks may not be needed in a particular
-    game, but if required, the code may need to go so far as to check the
-    pixels of the projectile sprite against the pixels of the target sprite.
-    If such checks are needed, then using monochrome maps in place of the
-    colored sprite pixels makes testing easier and faster. 
-
-    Note that if a collision is detected and handled, the state of
-    one or both sprites may change, effectively removing it/them from
-    being considered in subsequent loops.
 ```
