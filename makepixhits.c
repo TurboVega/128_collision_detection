@@ -7,14 +7,14 @@
 /*
     For sprites to collide, their bounding rectangles must overlap. Having a
     collision at the pixel level implies the overlap, but the opposite is not
-    true; the overlap does not imply a pixel level collision.
+    true; the overlap does not gurantee a pixel level collision.
 
     Sprites are 16x16 pixels, so the potential area within which they could overlap
     is nearly 32x32 pixels (31x31 to be precise), taking into account that the
     worst case is the trailing edge of sprite 1 overlapping the leading edge of
     sprite 2. If this happens in both X and Y, the sprites overlap in corners.
     The best case is that the 2 sprites overlap completely, meaning that their
-    leading edges are aligned in both X and Y.
+    leading (and trailing) edges are aligned in both X and Y.
 
     If the upper-left corner of sprite 1 is at least 16 pixel columns to the left
     or right of the upper-left corner of sprite 2 then the sprites do not overlap,
@@ -41,12 +41,12 @@
     coordinates in X and Y. The output is a table of decision results (simple flags)
     that may be indexed using adjusted (relative, not absolute) X and Y coordinates.
     Specifically, the indexes into the table will be DX and DY, both adjusted to be
-    non-negative (by adding 32, if necessary).
+    non-negative by adding 16.
 
     As mentioned above, overlapping sprites must live within a 31x31 pixel area,
     relative to each other. If we assume a 32x32 pixel square, place sprite 1
-    in the lower-right quadrant (at position (16,16)), and virtually overlay sprite 2,
-    we can determine whether sprite 2 collides with sprite 1, by looking for
+    in the lower-right quadrant (at position (16,16))with, and virtually overlay sprite 2,
+    we can determine whether sprite 2 collides  sprite 1, by looking for
     non-transparent pixels in both sprites, at the same pixel location, for
     every pixel location across sprite 1. This pixel test can be done for each
     possible position of sprite 2 (meaning for all applicable DX and DY values).
@@ -70,8 +70,8 @@
 
     At present, the output table contains only 1 flag per byte. It could be optimized
     to have 8 flags per byte, reducing its memory requirement by a factor of 8;
-    however, that would require more runtime computation to check the proper bit
-    within each byte.
+    however, that would require slightly more runtime computation to check the
+    proper bit within each byte.
 */
 
 const unsigned char sprite_bitmap[16][16] =
@@ -103,10 +103,10 @@ void main() {
         for (int dx = -16; dx < 16; dx++) {
             unsigned char flag = 0;
             for (int y1 = 0; y1 < 16; y1++) {
-                int y2 = y1 + dy;
+                int y2 = y1 - dy;
                 if (y2 >= 0 && y2 < 16) {
                     for (int x1 = 0; x1 < 16; x1++) {
-                        int x2 = x1 + dx;
+                        int x2 = x1 - dx;
                         if (x2 >= 0 && x2 < 16) {
                             if (sprite_bitmap[y1][x1] && sprite_bitmap[y2][x2]) {
                                 flag = 1;

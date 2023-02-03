@@ -105,7 +105,7 @@ init_all_sprite_positions:
     SetupData0 VRAM_sprattr
 
     ldx     #0                  ; init loop counter (sprite index)
-    lda     #28*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 28 path point data structures
+    lda     #27*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 27 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     InitRing sprite_path_0,SPRITE_END_RING_0,ZP_PATH_INDEX_0
@@ -264,44 +264,39 @@ y_collision:
     ; given target coordinates (tx, ty) via ZP_OLD_PATH_PTR
     ; given projectile coordinates (px, py) via ZP_PROJECTILE_PTR
     ;
-    ; dy = ty - py
-    ; if dy < 0, then dy += 32
-    ; if dy >= 32, stop (no collision)
+    ; dy = ty - py + 16
+    ; if (dy & $E0), stop (no collision)
     ;
-    ; dx = tx - px
-    ; if dx < 0, then dx += 32
-    ; if dx >= 32, stop (no collision)
+    ; dx = tx - px + 16
+    ; if (dx & $E0), stop (no collision)
     ;
 
-    ; compute and possibly adjust delta Y (DY)
+    ; compute and adjust delta Y (DY)
 
     ldy     #SPRITE_PATH_Y_LO                ; offset to Y (LO) in path structure
     lda     (ZP_OLD_PATH_PTR),y              ; get target Y (LO)
     sec
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (LO)
     sta     ZP_DELTA_Y_LO                    ; save delta Y (LO)
-
     iny                                      ; offset to Y (HI) in path structure
     lda     (ZP_OLD_PATH_PTR),y              ; get target Y (HI)
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (HI)
     sta     ZP_DELTA_Y_HI                    ; save delta Y (HI)
-    sta     ZP_TEMP_INDEX_HI                 ; save temporary index (HI)
-    bpl     dy_is_nonnegative                ; go if no need to adjust DY
 
-    lda     ZP_DELTA_Y_LO                    ; get delta Y (LO)
+    lda     ZP_DELTA_Y_LO                    ; load delta Y (LO)
     clc
-    adc     #32                              ; adjust DY (LO) 
+    adc     #16                              ; add 16 to delta Y
     sta     ZP_DELTA_Y_LO                    ; save delta Y (LO)
-    lda     ZP_DELTA_Y_HI                    ; get delta Y (HI)
-    adc     #0                               ; adjust DY (HI)
-    sta     ZP_DELTA_Y_HI                    ; save delta Y (HI)
-    sta     ZP_TEMP_INDEX_HI                 ; save temporary index (HI)
-    bmi     keep_rolling                     ; go if DY is still negative
-dy_is_nonnegative:
-    lda     ZP_DELTA_Y_LO                    ; get delta Y (LO)
     sta     ZP_TEMP_INDEX_LO                 ; save temporary index (LO)
+    bcc     no_delta_wrap                    ; go if no overflow
+    inc     ZP_DELTA_Y_HI                    ; save delta Y (HI)
+no_delta_wrap:
+    lda     ZP_DELTA_Y_HI                    ; load delta Y (HI)
+    sta     ZP_TEMP_INDEX_HI                 ; save temporary index (HI)
+    bne     keep_rolling                     ; go if DY >= 256, or < 0
+    lda     ZP_DELTA_Y_LO                    ; get delta Y (LO)
     and     #$E0                             ; make sure it's below 32
-    bne     keep_rolling                     ; go if DY >= 32
+    bne     keep_rolling                     ; go if DY >= 32, or < 0
 
     ; compute and possibly adjust delta X (DX)
 
@@ -310,30 +305,31 @@ dy_is_nonnegative:
     sec
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile X (LO)
     sta     ZP_DELTA_X_LO                    ; save delta X (LO)
-
     iny                                      ; offset to X (HI) in path structure
     lda     (ZP_OLD_PATH_PTR),y              ; get target X (HI)
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile X (HI)
     sta     ZP_DELTA_X_HI                    ; save delta X (HI)
-    bpl     dx_is_nonnegative                ; go if no need to adjust DX
 
-    lda     ZP_DELTA_X_LO                    ; get delta X (LO)
+    lda     ZP_DELTA_X_LO                    ; load delta X (LO)
     clc
-    adc     #32                              ; adjust DX (LO) 
+    adc     #16                              ; add 16 to delta X
     sta     ZP_DELTA_X_LO                    ; save delta X (LO)
-    lda     ZP_DELTA_X_HI                    ; get delta X (HI)
-    adc     #0                               ; adjust DX (HI)
-    sta     ZP_DELTA_X_HI                    ; save delta X (HI)
-    bmi     keep_rolling                     ; go if DX is still negative
-dx_is_nonnegative:
+    sta     ZP_TEMP_INDEX_LO                 ; save temporary index (LO)
+    bcc     no_delta_wrap2                   ; go if no overflow
+    inc     ZP_DELTA_X_HI                    ; save delta X (HI)
+no_delta_wrap2:
+    lda     ZP_DELTA_X_HI                    ; load delta X (HI)
+    sta     ZP_TEMP_INDEX_HI                 ; save temporary index (HI)
+    bne     keep_rolling                     ; go if DX >= 256, or < 0
     lda     ZP_DELTA_X_LO                    ; get delta X (LO)
     and     #$E0                             ; make sure it's below 32
-    bne     keep_rolling                     ; go if DX >= 32
+    bne     keep_rolling                     ; go if DX >= 32, or < 0
 
     ; index the sprite_hit_decision table to see if the sprites collide
  
     ; the table is indexed as sprite_hit_decision[dy][dx], so we must mutliply
     ; DY by 32, and add DX, to get the proper table index.
+
     lda     ZP_TEMP_INDEX_LO                 ; get temporary index (LO)
     asl                                      ; multiply DY by 2
     rol     ZP_TEMP_INDEX_HI
@@ -381,26 +377,15 @@ keep_rolling:
     bra     have_mask 
 
 new_collision:
+some_collision:
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
     ldy     #(>SPRITE_HIT_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
     sta     VERA_data0                   ; set pointer to pixel data (LO)
     sty     VERA_data0                   ; set pointer to pixel data (HI)
- jsr break_here
-    bra     set_sprite_color    ; go set sprite color
-
-some_collision:
-    lda     #<SPRITE_DEAD_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
-    ldy     #(>SPRITE_DEAD_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
-    sta     VERA_data0                   ; set pointer to pixel data (LO)
-    sty     VERA_data0                   ; set pointer to pixel data (HI)
- jsr break_here
-set_sprite_color:
-;    sta     VERA_data0                   ; set pointer to pixel data (LO)
-;    sty     VERA_data0                   ; set pointer to pixel data (HI)
 
     CopySpriteXYFields
  
-    ; new collision; change the sprite
+    ; for any collision, change the target sprite so it cannot collide
     lda     #SPRITE_ZDEPTH_ABOVE_L1 ; includes empty collision mask
     sta     sprite_collision_mask,x ; set initial sprite state
     sta     VERA_data0              ; show sprite, but prevent collision
@@ -536,7 +521,7 @@ update_all_sprite_positions:
     SetupData0 VRAM_sprattr
 
     ldx     #0                  ; init loop counter (sprite index)
-    lda     #28*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 28 path point data structures
+    lda     #27*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 27 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
 
     lda     #<quadrant_projectiles      ; get start of projectile array (LO)
@@ -563,21 +548,4 @@ TARGET = 1
     rts
 
 break_here:
-   phx 
- aa: ldx #0
- bb: ldy #0
- cc: pha 
-    phx 
-    phy 
-    lda #2
-dd: inc 
-    bne dd
-    ply 
-    plx 
-    pla 
-    iny 
-    bne cc 
-    inx 
-    bne bb
-    plx 
     rts

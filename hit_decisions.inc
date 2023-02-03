@@ -1,5 +1,3 @@
-; File: hit_decisions.inc
-
 sprite_hit_decision:
     .byte    0    ; dx: -16, dy: -16
     .byte    0    ; dx: -15, dy: -16
