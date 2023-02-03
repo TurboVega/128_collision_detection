@@ -194,9 +194,10 @@ use_old_path_ptr:
     clc
     adc     #2                          ; sizeof a pointer
     sta     ZP_QUAD_PROJ_ARRAY_PTR_LO   ; set array item pointer (LO)
-    bcc     no_ptr_wrap                 ; go if no overflow
-    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set array item pointer (HI)
-no_ptr_wrap:
+    lda     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; advance array item pointer (HI)
+    adc     #0
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_HI   ; set array item pointer (HI)
+
     ; fall through to keep_rolling
  
     .endif
@@ -229,7 +230,7 @@ check_spatial_collision:
     sta     ZP_QUAD_PROJ_ARRAY_PTR_LO       ; set array item pointer (LO)
     lda     ZP_QUAD_PROJ_ARRAY_PTR_HI       ; advance array item pointer (HI)
     adc     #0
-    inc     ZP_QUAD_PROJ_ARRAY_PTR_HI       ; set array item pointer (HI)
+    sta     ZP_QUAD_PROJ_ARRAY_PTR_HI       ; set array item pointer (HI)
 
     ldy     #SPRITE_PATH_SPATIAL_MASK_X_LO   ; offset into path structure for mask X (LO)
     lda     (ZP_OLD_PATH_PTR),y              ; get target spatial mask X (LO)
@@ -284,6 +285,7 @@ y_collision:
     lda     (ZP_OLD_PATH_PTR),y              ; get target Y (HI)
     sbc     (ZP_PROJECTILE_PTR),y            ; subtract projectile Y (HI)
     sta     ZP_DELTA_Y_HI                    ; save delta Y (HI)
+    sta     ZP_TEMP_INDEX_HI                 ; save temporary index (HI)
     bpl     dy_is_nonnegative                ; go if no need to adjust DY
 
     lda     ZP_DELTA_Y_LO                    ; get delta Y (LO)
@@ -381,15 +383,20 @@ keep_rolling:
 new_collision:
     lda     #<SPRITE_HIT_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
     ldy     #(>SPRITE_HIT_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
+    sta     VERA_data0                   ; set pointer to pixel data (LO)
+    sty     VERA_data0                   ; set pointer to pixel data (HI)
+ jsr break_here
     bra     set_sprite_color    ; go set sprite color
 
 some_collision:
     lda     #<SPRITE_DEAD_BITMAP_ADDR_SHIFTED ; get pointer to pixel data (LO)
     ldy     #(>SPRITE_DEAD_BITMAP_ADDR_SHIFTED)|SPRITE_MODE_8_BPP ; pixel data (HI)
-
-set_sprite_color:
     sta     VERA_data0                   ; set pointer to pixel data (LO)
     sty     VERA_data0                   ; set pointer to pixel data (HI)
+ jsr break_here
+set_sprite_color:
+;    sta     VERA_data0                   ; set pointer to pixel data (LO)
+;    sty     VERA_data0                   ; set pointer to pixel data (HI)
 
     CopySpriteXYFields
  
@@ -542,7 +549,7 @@ update_all_sprite_positions:
 
     lda     #9*SPRITE_PATH_STRUCT_SIZE ; # of bytes between 9 path point data structures
     sta     ZP_NEXT_SPRITE_INC  ; save the increment amount
-
+ 
 ; for sprites on the "horizontal" rings
 TARGET = 1
 
@@ -553,4 +560,24 @@ TARGET = 1
     MoveRing sprite_path_5,end_sprite_path_5,SPRITE_END_RING_5,ZP_PATH_INDEX_5,RING_5_POINTS
     MoveRing sprite_path_6,end_sprite_path_6,SPRITE_END_RING_6,ZP_PATH_INDEX_6,RING_6_POINTS
     MoveRing sprite_path_7,end_sprite_path_7,SPRITE_END_RING_7,ZP_PATH_INDEX_7,RING_7_POINTS
+    rts
+
+break_here:
+   phx 
+ aa: ldx #0
+ bb: ldy #0
+ cc: pha 
+    phx 
+    phy 
+    lda #2
+dd: inc 
+    bne dd
+    ply 
+    plx 
+    pla 
+    iny 
+    bne cc 
+    inx 
+    bne bb
+    plx 
     rts
