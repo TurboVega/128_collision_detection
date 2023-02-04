@@ -126,7 +126,7 @@ This involves a series (combination) of several methods:
     c. For targets involved in spatial collisions, lookup the proper item
        in the pixel-level decision table, based on the X and Y coordinates
        of the target and the projectile. If the table item value is
-       nonzero, then there is a pixel-level collision. The lookup indexe
+       nonzero, then there is a pixel-level collision. The lookup indexes
        are relative, not absolute, so DX and DY are used, not the actual
        X and Y coordinates. This is necessary to keep the size of the
        decision table within reasonable memory limits.
