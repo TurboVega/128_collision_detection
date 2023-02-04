@@ -15,6 +15,7 @@ of time, and keep the results in tables. This includes:
 
 * The X and Y coordinates of every sprite position on every ring (elliptical path).
 Keeping this data in a table eliminates the sin() and cos() computations at runtime.
+* The spatial maps for all X and Y positions in all sprite paths.
 * The decisions of whether a projectile collides with a target based on their
 relative distance from each other. Keeping this data in a table eliminates the
 pixel-level comparison operations at runtime.
