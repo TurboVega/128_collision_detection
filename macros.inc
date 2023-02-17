@@ -15,7 +15,7 @@
    .scope
       ; set data port 1 to start writing to VRAM address
       lda #$01
-      stz VERA_ctrl
+      sta VERA_ctrl
       lda #($10 | ^vram_addr) ; stride = 1
       sta VERA_addr_bank
       lda #>vram_addr
